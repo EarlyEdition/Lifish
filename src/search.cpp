@@ -210,8 +210,7 @@ void MainThread::search() {
 
   // Check if there are threads with a better score than main thread
   Thread* bestThread = this;
-  if (Options["MultiPV"] == 1
-)
+  if (Options["MultiPV"] == 1 && rootMoves[0].pv[0] != MOVE_NONE)
   {
       for (Thread* th : Threads)
           if (   th->completedDepth > bestThread->completedDepth
