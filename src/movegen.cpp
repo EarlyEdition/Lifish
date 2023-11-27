@@ -271,8 +271,10 @@ namespace {
 
     if (Type != CAPTURES && Type != EVASIONS && pos.can_castle(Us))
     {
+
             moveList = generate_castling<MakeCastling<Us,  KING_SIDE>::right, Checks>(pos, moveList, Us, ci);
             moveList = generate_castling<MakeCastling<Us, QUEEN_SIDE>::right, Checks>(pos, moveList, Us, ci);
+
     }
 
     return moveList;

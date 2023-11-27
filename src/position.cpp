@@ -22,7 +22,9 @@
 #include <cassert>
 #include <cstring>   // For std::memset, std::memcmp
 #include <iomanip>
-#include <sstream>
+//#include <sstream>
+//#include <iostream>
+
 
 #include "bitcount.h"
 #include "misc.h"
@@ -194,120 +196,96 @@ void Position::clear() {
 /// This function is not very robust - make sure that input FENs are correct,
 /// this is assumed to be the responsibility of the GUI.
 
-void Position::set(const string& fenStr, Thread* th) {
-/*
-   A FEN string defines a particular position using only the ASCII character set.
+void Position::set(const char* fenStr, Thread* th) {
 
-   A FEN string contains six fields separated by a space. The fields are:
+//    std::cout << fenStr << std::endl;
+    unsigned char col, row, token;
+    size_t idx;
+    Square sq = SQ_A8;
 
-   1) Piece placement (from white's perspective). Each rank is described, starting
-      with rank 8 and ending with rank 1. Within each rank, the contents of each
-      square are described from file A through file H. Following the Standard
-      Algebraic Notation (SAN), each piece is identified by a single letter taken
-      from the standard English names. White pieces are designated using upper-case
-      letters ("PNBRQK") whilst Black uses lowercase ("pnbrqk"). Blank squares are
-      noted using digits 1 through 8 (the number of blank squares), and "/"
-      separates ranks.
 
-   2) Active color. "w" means white moves next, "b" means black.
+    clear();
 
-   3) Castling availability. If neither side can castle, this is "-". Otherwise,
-      this has one or more letters: "K" (White can castle kingside), "Q" (White
-      can castle queenside), "k" (Black can castle kingside), and/or "q" (Black
-      can castle queenside).
 
-   4) En passant target square (in algebraic notation). If there's no en passant
-      target square, this is "-". If a pawn has just made a 2-square move, this
-      is the position "behind" the pawn. This is recorded regardless of whether
-      there is a pawn in position to make an en passant capture.
+    // 1. Piece placement
+    while ((token = *fenStr++) && token != ' ')
+    {
+//        std::cout << token << std::endl;
+        if (isdigit(token))
+            sq += Square(token - '0'); // Advance the given number of files
 
-   5) Halfmove clock. This is the number of halfmoves since the last pawn advance
-      or capture. This is used to determine if a draw can be claimed under the
-      fifty-move rule.
+        else if (token == '/')
+            sq -= Square(16);
 
-   6) Fullmove number. The number of the full move. It starts at 1, and is
-      incremented after Black's move.
-*/
+        else if ((idx = PieceToChar.find(token)) != string::npos)
+        {
+            put_piece(color_of(Piece(idx)), type_of(Piece(idx)), sq);
+            ++sq;
+        }
+    }
 
-  unsigned char col, row, token;
-  size_t idx;
-  Square sq = SQ_A8;
-  std::istringstream ss(fenStr);
+    // 2. Active color
+    token = *fenStr++;  // std::cout << token << std::endl;
 
-  clear();
-  ss >> std::noskipws;
+    sideToMove = (token == 'w' ? WHITE : BLACK);
 
-  // 1. Piece placement
-  while ((ss >> token) && !isspace(token))
-  {
-      if (isdigit(token))
-          sq += Square(token - '0'); // Advance the given number of files
+    token = *fenStr++;   //std::cout << token << std::endl;
 
-      else if (token == '/')
-          sq -= Square(16);
 
-      else if ((idx = PieceToChar.find(token)) != string::npos)
-      {
-          put_piece(color_of(Piece(idx)), type_of(Piece(idx)), sq);
-          ++sq;
-      }
-  }
+    // 3. Castling availability. Compatible with 3 standards: Normal FEN standard,
+    // Shredder-FEN that uses the letters of the columns on which the rooks began
+    // the game instead of KQkq and also X-FEN standard that, in case of Chess960,
+    // if an inner rook is associated with the castling right, the castling tag is
+    // replaced by the file letter of the involved rook, as for the Shredder-FEN.
+    while ((token = *fenStr++) && !isspace(token))
+    {
+        Square rsq;
+        Color c = islower(token) ? BLACK : WHITE;
+        Piece rook = make_piece(c, ROOK);
 
-  // 2. Active color
-  ss >> token;
-  sideToMove = (token == 'w' ? WHITE : BLACK);
-  ss >> token;
+        token = char(toupper(token));
 
-  // 3. Castling availability. Compatible with 3 standards: Normal FEN standard,
-  // Shredder-FEN that uses the letters of the columns on which the rooks began
-  // the game instead of KQkq and also X-FEN standard that, in case of Chess960,
-  // if an inner rook is associated with the castling right, the castling tag is
-  // replaced by the file letter of the involved rook, as for the Shredder-FEN.
-  while ((ss >> token) && !isspace(token))
-  {
-      Square rsq;
-      Color c = islower(token) ? BLACK : WHITE;
-      Piece rook = make_piece(c, ROOK);
+        if (token == 'K')
+            for (rsq = relative_square(c, SQ_H1); piece_on(rsq) != rook; --rsq) {}
 
-      token = char(toupper(token));
+        else if (token == 'Q')
+            for (rsq = relative_square(c, SQ_A1); piece_on(rsq) != rook; ++rsq) {}
 
-      if (token == 'K')
-          for (rsq = relative_square(c, SQ_H1); piece_on(rsq) != rook; --rsq) {}
+        else if (token >= 'A' && token <= 'H')
+            rsq = make_square(File(token - 'A'), relative_rank(c, RANK_1));
 
-      else if (token == 'Q')
-          for (rsq = relative_square(c, SQ_A1); piece_on(rsq) != rook; ++rsq) {}
+        else
+            continue;
 
-      else if (token >= 'A' && token <= 'H')
-          rsq = make_square(File(token - 'A'), relative_rank(c, RANK_1));
+        set_castling_right(c, rsq);
+    }
 
-      else
-          continue;
+    // 4. En passant square. Ignore if no pawn capture is possible
+    if ((col = *fenStr++ && (col >= 'a' && col <= 'h'))
+        && (row = *fenStr++ && (row == '3' || row == '6')))
+    {
+        st->epSquare = make_square(File(col - 'a'), Rank(row - '1'));
 
-      set_castling_right(c, rsq);
-  }
+        if (!(attackers_to(st->epSquare) & pieces(sideToMove, PAWN)))
+            st->epSquare = SQ_NONE;
+    }
 
-  // 4. En passant square. Ignore if no pawn capture is possible
-  if (   ((ss >> col) && (col >= 'a' && col <= 'h'))
-      && ((ss >> row) && (row == '3' || row == '6')))
-  {
-      st->epSquare = make_square(File(col - 'a'), Rank(row - '1'));
+    // 5-6. Halfmove clock and fullmove number
+    st->rule50 = *fenStr++;// strtol(fenStr, &fenStr, 10);
 
-      if (!(attackers_to(st->epSquare) & pieces(sideToMove, PAWN)))
-          st->epSquare = SQ_NONE;
-  }
+    gamePly = *fenStr++; //(fenStr, NULL, 10);
 
-  // 5-6. Halfmove clock and fullmove number
-  ss >> std::skipws >> st->rule50 >> gamePly;
+    // Convert from fullmove starting from 1 to ply starting from 0,
+    // handle also common incorrect FEN with fullmove = 0.
+    gamePly = std::max(2 * (gamePly - 1), 0) + (sideToMove == BLACK);
 
-  // Convert from fullmove starting from 1 to ply starting from 0,
-  // handle also common incorrect FEN with fullmove = 0.
-  gamePly = std::max(2 * (gamePly - 1), 0) + (sideToMove == BLACK);
+    thisThread = th;
+    set_state(st);
 
-  thisThread = th;
-  set_state(st);
-
-  assert(pos_is_ok());
+    assert(pos_is_ok());
 }
+
+
 
 
 /// Position::set_castling_right() is a helper function used to set castling
@@ -389,8 +367,8 @@ void Position::set_state(StateInfo* si) const {
 const string Position::fen() const {
 
   int emptyCnt;
-  std::ostringstream ss;
-
+//  std::ostringstream ss;
+  string *str;
   for (Rank r = RANK_8; r >= RANK_1; --r)
   {
       for (File f = FILE_A; f <= FILE_H; ++f)
@@ -399,37 +377,37 @@ const string Position::fen() const {
               ++emptyCnt;
 
           if (emptyCnt)
-              ss << emptyCnt;
+              *str++ = emptyCnt;
 
           if (f <= FILE_H)
-              ss << PieceToChar[piece_on(make_square(f, r))];
+              *str++ = PieceToChar[piece_on(make_square(f, r))];
       }
 
       if (r > RANK_1)
-          ss << '/';
+          *str++ = '/';
   }
 
-  ss << (sideToMove == WHITE ? " w " : " b ");
+  *str++ = (sideToMove == WHITE ? " w " : " b ");
 
   if (can_castle(WHITE_OO))
-      ss << 'K';
+      *str++ = ('K');
 
   if (can_castle(WHITE_OOO))
-      ss << 'Q';
+      *str++ = ('Q');
 
   if (can_castle(BLACK_OO))
-      ss << 'k';
+      *str++ = ('k');
 
   if (can_castle(BLACK_OOO))
-      ss << 'q';
+      *str++ = ('q');
 
   if (!can_castle(WHITE) && !can_castle(BLACK))
-      ss << '-';
+      *str++ = '-';
 
-  ss << (ep_square() == SQ_NONE ? " - " : " " + UCI::square(ep_square()) + " ")
-     << st->rule50 << " " << 1 + (gamePly - (sideToMove == BLACK)) / 2;
+  *str++ = (ep_square() == SQ_NONE ? " - " : " " + UCI::square(ep_square()) + " ");
+  *str++ = st->rule50; *str++ = " "; *str++ = 1 + (gamePly - (sideToMove == BLACK)) / 2;
 
-  return ss.str();
+  return *str;
 }
 
 
@@ -1085,6 +1063,7 @@ bool Position::is_draw() const {
 /// Position::flip() flips position with the white and black sides reversed. This
 /// is only useful for debugging e.g. for finding evaluation symmetry bugs.
 
+/*
 void Position::flip() {
 
   string f, token;
@@ -1111,11 +1090,14 @@ void Position::flip() {
   std::getline(ss, token); // Half and full moves
   f += token;
 
-  set(f, this_thread());
+  char *cstr = new char(f.length() + 1);
+  strcpy(cstr,f.c_str());
+
+  set(cstr, this_thread());
 
   assert(pos_is_ok());
 }
-
+*/
 
 /// Position::pos_is_ok() performs some consistency checks for the position object.
 /// This is meant to be helpful when debugging.
