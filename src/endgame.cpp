@@ -100,7 +100,10 @@ namespace {
     string fen =  sides[0] + char(8 - sides[0].length() + '0') + "/8/8/8/8/8/8/"
                 + sides[1] + char(8 - sides[1].length() + '0') + " w - - 0 10";
 
-    return Position(fen, nullptr).material_key();
+//    char* cstr2 = new char(fen.length() + 1);
+//    strcpy(cstr2, fen.c_str());
+    const char* cstr2 = fen.c_str();
+    return Position(cstr2,nullptr).material_key();
   }
 
 } // namespace

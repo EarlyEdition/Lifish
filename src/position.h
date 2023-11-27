@@ -89,11 +89,11 @@ public:
   Position() = default; // To define the global object RootPos
   Position(const Position&) = delete;
   Position(const Position& pos, Thread* th) { *this = pos; thisThread = th; }
-  Position(const std::string& f, Thread* th) { set(f, th); }
+  Position(const char* f, Thread* th) { set(f,th); }
   Position& operator=(const Position&); // To assign RootPos from UCI
 
   // FEN string input/output
-  void set(const std::string& fenStr, Thread* th);
+  void set(const char* fenStr, Thread* th);
   const std::string fen() const;
 
   // Position representation
