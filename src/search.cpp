@@ -210,7 +210,7 @@ void MainThread::search() {
 
   // Check if there are threads with a better score than main thread
   Thread* bestThread = this;
-  if (Options["MultiPV"] == 1 && rootMoves[0].pv[0] != MOVE_NONE)
+  if (Options["MultiPV"] == 1 && !Limits.depth && rootMoves[0].pv[0] != MOVE_NONE)
   {
       for (Thread* th : Threads)
           if (   th->completedDepth > bestThread->completedDepth
@@ -260,7 +260,7 @@ void Thread::search() {
   multiPV = std::min(multiPV, rootMoves.size());
 
   // Iterative deepening loop until requested to stop or target depth reached
-  while (++rootDepth < DEPTH_MAX && !Signals.stop && (!Limits.depth || rootDepth <= Limits.depth))
+  while (++rootDepth < DEPTH_MAX && !Signals.stop && (!Limits.depth || Threads.main()->rootDepth <= Limits.depth))
   {
       // Set up the new depth for the helper threads skipping in average each
       // 2nd ply (using a half density map similar to a Hadamard matrix).
